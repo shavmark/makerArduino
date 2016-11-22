@@ -52,117 +52,149 @@ class xyRobot
   public:
     enum Command {NoCommand, SetPin, MoveTo, Move, Run, RunSpeed, SetMaxSpeed, SetAcceleration, SetSpeed, SetCurrentPosition, RunToPosition, RunSpeedToPosition, DisableOutputs, EnableOutputs, GetDistanceToGo, GetTargetPositon, GetCurrentPosition, } ;
     
-    void begin(int baud, MeStepper& stepper1, MeStepper& stepper2);
+    xyRobot() {allocRobots();}
+
+    ~xyRobot() {end();}
     
-    int read(MeStepper& stepper1, MeStepper& stepper2);         // must be called regularly to clean out Serial buffer
-          
+    void begin(int baud);
+    void end();
+    
+    int read();         // must be called regularly to clean out Serial buffer
+    void run();      
 
   private:
-  
-    long getLongData(){return (long)((packet[2]<<8) + packet[3]);}
-    float getFloatData(){return (float)((packet[2]<<8) + packet[3]);}
+
+  /* data - 1 or 2 steppers defined in the data
+ *  byte 0 : 0xee - start of data packet
+ *  byte 1 : cmd for stepper1 (see enum Command)
+ *  byte 2 : data for stepper1 (high byte) 
+ *  byte 3 : data for stepper1 (low byte)
+ *  byte 4 : cmd  for stepper2, NoCommand for none
+ *  byte 5 : data for stepper2 (high byte)
+ *  byte 6 : data for stepper2 (low byte)
+ */
+
+    const uint8_t IDstepper1=1;
+    const uint8_t IDstepper2=4;
+
+    long getLongData(uint8_t id){return (long)((packet[id+1]<<8) + packet[id+2]);}
+    float getFloatData(uint8_t id){return (float)((packet[id+1]<<8) + packet[id+2]);}
+    Command getCommand(uint8_t id) {return packet[id];}
+    MeStepper*  getStepper(uint8_t id);
+   
+    void exec(uint8_t id);
     
-    uint8_t  getID() {return packet[1];}
-    Command getCommand() {return packet[2];}
-    void exec(MeStepper& stepper);
     // internal variables used for reading messages
-    const int packetsize = 5;
-    uint8_t packet[5];  // temporary values, moved after we confirm checksum
+    const int packetsize = 7;
+    uint8_t packet[7];  // temporary values, moved after we confirm checksum
     int index;              // -1 = waiting for new packet
     int readpacket();
+    MeStepper* steppers[2]; // enable reference by id
+    void allocRobots();
 };
 
 xyRobot robot;
-MeStepper stepper1(PORT_1);
-MeStepper stepper2(PORT_2);
 
 void setup()
 {  
-  robot.begin(9600, stepper1, stepper2);
+  robot.begin(9600);
 }
 
 void loop()
 {
-  robot.read(stepper1, stepper2);
-  
-  if(Serial.available())
-  {
-    char a = Serial.read();
-    switch(a)
-    {
-      case '0':
-      stepper1.moveTo(10);
-      break;
-      case '1':
-      stepper1.moveTo(200);
-      break;
-      case '2':
-      stepper1.move(50);
-      break;
-      case '3':
-      stepper1.move(100);
-      break;
-      case '4':
-      stepper1.move(200);
-      break;
-      case '5':
-      stepper1.move(400);
-      break;
-      case '6':
-      stepper1.move(600);
-      break;
-      case '7':
-      stepper1.move(4000);
-      break;
-      case '8':
-      stepper1.move(8000);
-      break;
-      case '9':
-      stepper1.move(3200);
-      break;
-    }
+  robot.read();
+  robot.run();
+}
+
+MeStepper*  xyRobot::getStepper(uint8_t id) {
+  if (id == IDstepper1){
+    return steppers[0];
   }
-      if (!stepper1.run()){
-        Serial.println("bad!");
-      }
+  if (id == IDstepper2){
+    return steppers[1];
+  }
+}
+void xyRobot::end(){
+  if (steppers[0]){
+    delete steppers[0];
+    steppers[0] = nullptr;
+  }
+  if (steppers[1]){
+    delete steppers[1];
+    steppers[1] = nullptr;
+  }
+}
+void xyRobot::allocRobots(){
+  steppers[0] = new MeStepper(PORT_1);
+  steppers[1] = new MeStepper(PORT_2);
+  if (steppers[0] == nullptr || steppers[1] == nullptr){
+   Serial.println("crash!");
+  }
+  memset(packet, 0, sizeof packet);
 }
 
- void xyRobot::begin(int baud, MeStepper& stepper1, MeStepper& stepper2){
-      index = -1;
-      // Change these to suit your stepper if you want
-      stepper1.setMaxSpeed(1000);
-      stepper1.setAcceleration(20000);
-      stepper2.setMaxSpeed(1000);
-      stepper2.setAcceleration(20000);
-      Serial.begin(baud);
+void xyRobot::run(){
+  if (!getStepper(IDstepper1)->run()){
+    Serial.println("IDstepper1 bad!");
+  }
+  if (!getStepper(IDstepper2)->run()){
+    Serial.println("IDstepper2 bad!");
+  }
+}
+ void xyRobot::begin(int baud){
+  Serial.begin(baud);
+
+  if (getStepper(IDstepper1) == nullptr && getStepper(IDstepper2) == nullptr){
+    Serial.println("not setup!"); //bugbug return json in all micro code
+    return;
+  }
+
+  index = -1;
+  // Change these to suit your stepper if you want, but set some reasonable defaults now
+  if (getStepper(IDstepper1)){
+    getStepper(IDstepper1)->setMaxSpeed(1000);
+    getStepper(IDstepper1)->setAcceleration(20000);
+  }
+  if (getStepper(IDstepper2)){
+    getStepper(IDstepper2)->setMaxSpeed(1000);
+    getStepper(IDstepper2)->setAcceleration(20000);
+  }
 }
 
-void xyRobot::exec(MeStepper& stepper){
-  switch(getCommand()){
+void xyRobot::exec(uint8_t id){
+  switch(getCommand(id)){
    case MoveTo:
-   stepper.moveTo(getLongData());
+   Serial.println("move to");
+   getStepper(id)->moveTo(getLongData(id));
    break; 
+  }
+  if (!getStepper(id)->run()){
+    Serial.println("bad!");
   }
 }
 
 
 /* data - 1 or 2 steppers defined in the data
- *  byte 0 : 0xff - start of data packet
- *  byte 1 : id - id of stepper mode, 1,2 etc
- *  byte 2 : cmd (see enum Command), or 0
- *  byte 3 : data for command (high byte), or 0
- *  byte 4 : data for command (low byte), or 0
+ *  byte 0 : 0xee - start of data packet
+ *  byte 1 : cmd for stepper1 (see enum Command)
+ *  byte 2 : data for stepper1 (high byte) 
+ *  byte 3 : data for stepper1 (low byte)
+ *  byte 4 : cmd  for stepper2, NoCommand for none
+ *  byte 5 : data for stepper2 (high byte)
+ *  byte 6 : data for stepper2 (low byte)
  */
-int xyRobot::read(MeStepper& stepper1, MeStepper& stepper2){
+int xyRobot::read(){
 
     if (readpacket()){
-        // packet complete
-        if (getID() == 1){
-          exec(stepper1);
+        // packet complete, execute it
+        if (getCommand(IDstepper1) != NoCommand){
+          exec(IDstepper1);
         }
-        else {
-          exec(stepper2);
+        if (getCommand(IDstepper2) != NoCommand){
+          exec(IDstepper2);
         }
+        // reset data
+         memset(packet, 0, sizeof packet);
         return 1;
     }
     return 0;
@@ -173,9 +205,12 @@ int xyRobot::readpacket(){
    while(Serial.available() > 0){
 
         if(index == -1){         // looking for new packet
-            if(Serial.read() == 0xff){
+            if(Serial.read() == 0xee){
               // new packet found
               index = 0;
+            }
+            else {
+              Serial.println("unknown");
             }
         }
         else {
@@ -185,6 +220,7 @@ int xyRobot::readpacket(){
                 while(Serial.available()) {
                   Serial.read();
                 }
+                 Serial.println("packet read");
                 return 1;
             }
             packet[index] = (uint8_t) Serial.read();
