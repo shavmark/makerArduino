@@ -61,7 +61,7 @@ class xyRobot
     
     int read();         // must be called regularly to clean out Serial buffer
     void run();      
-
+    void IDPacket();
   private:
 
   /* data - 1 or 2 steppers defined in the data
@@ -104,6 +104,17 @@ void loop()
   robot.run();
 }
 
+// same data type as trossen for consistancy
+// key data is there are 5 bytes, the ARM ID is known, byte 4 is 0, chcksum is known
+void xyRobot::IDPacket()  {
+  Serial.write(0xFF);
+  Serial.write((uint8_t) 4);// ARM ID
+  Serial.write((uint8_t) 6); // mode
+  Serial.write((uint8_t) 0);
+  Serial.write((uint8_t)(255);
+  
+}
+
 MeStepper*  xyRobot::getStepper(StepperID id) {
   if (id == IDstepper1){
     return steppers[0];
@@ -126,12 +137,16 @@ void xyRobot::allocRobots(){
   steppers[0] = new MeStepper(PORT_1);
   steppers[1] = new MeStepper(PORT_2);
   if (steppers[0] == nullptr || steppers[1] == nullptr){
-   Serial.println("crash!");
+   Serial.println("crash!");//bugbug go to json
   }
   memset(packet, 0, sizeof packet);
 }
 
 void xyRobot::run(){
+   if (getStepper(IDstepper1) == nullptr || getStepper(IDstepper2) == nullptr){
+   Serial.println("crash!");//bugbug go to json
+   return;
+  }
   if (!getStepper(IDstepper1)->run()){
     Serial.println("IDstepper1 bad!");
   }
@@ -157,18 +172,22 @@ void xyRobot::run(){
     getStepper(IDstepper2)->setMaxSpeed(1000);
     getStepper(IDstepper2)->setAcceleration(20000);
   }
+  Serial.println("xy robot signed on");
+  Serial.println("my name is Lena");
 }
 
 void xyRobot::exec(StepperID id){
   switch(getCommand(id)){
    case MoveTo:
-   Serial.println("move to");
-   getStepper(id)->moveTo(getLongData(id));
+   Serial.print("move to ");
+   Serial.println(getLongData(id));
+   //getStepper(id)->moveTo(getLongData(id));
    break; 
   }
-  if (!getStepper(id)->run()){
-    Serial.println("bad!");
-  }
+  IDPacket(); // always sent to be comptable with trossen
+  //bugbug only send when data is validated if (!getStepper(id)->run()){
+    //Serial.println("bad!");
+  //}
 }
 
 
@@ -218,7 +237,19 @@ int xyRobot::readpacket(){
                 while(Serial.available()) {
                   Serial.read();
                 }
-                 Serial.println("packet read");
+                 Serial.print("packet read:");
+                 Serial.print(" cmd1:");
+                 Serial.print(getCommand(IDstepper1));
+                 Serial.print(" long data: ");
+                 Serial.print(getLongData(IDstepper1));
+                 Serial.print(" float data: ");
+                 Serial.print(getFloatData(IDstepper1));
+                 Serial.print(" cmd2:");
+                 Serial.print(getCommand(IDstepper2));
+                 Serial.print(" long data: ");
+                 Serial.print(getLongData(IDstepper2));
+                 Serial.print(" float data: ");
+                 Serial.println(getFloatData(IDstepper2));
                 return 1;
             }
             packet[index] = (uint8_t) Serial.read();
