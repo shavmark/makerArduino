@@ -74,15 +74,13 @@ class xyRobot
  *  byte 6 : data for stepper2 (low byte)
  */
 
-    const uint8_t IDstepper1=1;
-    const uint8_t IDstepper2=4;
-
-    long getLongData(uint8_t id){return (long)((packet[id+1]<<8) + packet[id+2]);}
-    float getFloatData(uint8_t id){return (float)((packet[id+1]<<8) + packet[id+2]);}
-    Command getCommand(uint8_t id) {return packet[id];}
-    MeStepper*  getStepper(uint8_t id);
+    enum StepperID {IDstepper1=1, IDstepper2=4};
+    long getLongData(StepperID id){return (long)((packet[id+1]<<8) + packet[id+2]);}
+    float getFloatData(StepperID id){return (float)((packet[id+1]<<8) + packet[id+2]);}
+    Command getCommand(StepperID id) {return packet[id];}
+    MeStepper*  getStepper(StepperID id);
    
-    void exec(uint8_t id);
+    void exec(StepperID id);
     
     // internal variables used for reading messages
     const int packetsize = 7;
@@ -106,7 +104,7 @@ void loop()
   robot.run();
 }
 
-MeStepper*  xyRobot::getStepper(uint8_t id) {
+MeStepper*  xyRobot::getStepper(StepperID id) {
   if (id == IDstepper1){
     return steppers[0];
   }
@@ -161,7 +159,7 @@ void xyRobot::run(){
   }
 }
 
-void xyRobot::exec(uint8_t id){
+void xyRobot::exec(StepperID id){
   switch(getCommand(id)){
    case MoveTo:
    Serial.println("move to");
