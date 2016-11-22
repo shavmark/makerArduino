@@ -156,15 +156,14 @@ void xyRobot::exec(MeStepper& stepper){
 int xyRobot::read(MeStepper& stepper1, MeStepper& stepper2){
 
     if (readpacket()){
-        if(index == packetsize){ // packet complete
-          if (getID() == 1){
-            exec(stepper1);
-          }
-          else {
-            exec(stepper2);
-          }
-          return 1;
+        // packet complete
+        if (getID() == 1){
+          exec(stepper1);
         }
+        else {
+          exec(stepper2);
+        }
+        return 1;
     }
     return 0;
 }
