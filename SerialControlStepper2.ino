@@ -56,23 +56,19 @@ class xyRobot
     
     int read(MeStepper& stepper1, MeStepper& stepper2);         // must be called regularly to clean out Serial buffer
           
+
+  private:
+  
     long getLongData(){return (long)((packet[2]<<8) + packet[3]);}
     float getFloatData(){return (float)((packet[2]<<8) + packet[3]);}
     
     uint8_t  getID() {return packet[1];}
     Command getCommand() {return packet[2];}
     void exec(MeStepper& stepper);
-
-  private:
-  
-    uint8_t cmd;
     // internal variables used for reading messages
-    int checksum;
-    uint8_t status; 
-   const int packetsize = 5;
+    const int packetsize = 5;
     uint8_t packet[5];  // temporary values, moved after we confirm checksum
     int index;              // -1 = waiting for new packet
-    Command command;
     int readpacket();
 };
 
@@ -87,6 +83,8 @@ void setup()
 
 void loop()
 {
+  robot.read(stepper1, stepper2);
+  
   if(Serial.available())
   {
     char a = Serial.read();
@@ -130,9 +128,7 @@ void loop()
 }
 
  void xyRobot::begin(int baud, MeStepper& stepper1, MeStepper& stepper2){
-      status = 0; 
       index = -1;
-      command = NoCommand;
       // Change these to suit your stepper if you want
       stepper1.setMaxSpeed(1000);
       stepper1.setAcceleration(20000);
@@ -181,7 +177,6 @@ int xyRobot::readpacket(){
             if(Serial.read() == 0xff){
               // new packet found
               index = 0;
-              checksum = 0;
             }
         }
         else {
@@ -194,7 +189,6 @@ int xyRobot::readpacket(){
                 return 1;
             }
             packet[index] = (uint8_t) Serial.read();
-            checksum += (int) packet[index];
             index++;
         }
     }
