@@ -108,8 +108,8 @@ void loop()
 // key data is there are 5 bytes, the ARM ID is known, byte 4 is 0, chcksum is known
 void xyRobot::IDPacket()  {
   Serial.write(0xFF);
-  Serial.write((uint8_t) 4);// ARM ID
-  Serial.write((uint8_t) 6); // mode
+  Serial.write((uint8_t) 99);// ARM ID
+  Serial.write((uint8_t) 5); // mode
   Serial.write((uint8_t) 0);
   Serial.write((uint8_t)(255);
   
