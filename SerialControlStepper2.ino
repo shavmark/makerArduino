@@ -23,7 +23,7 @@
  */
 
 #include "MeOrion.h"
-#include <SoftwareSerial.h>
+#define MyIDis 1
 
 /* commands
       1. void MeStepper::setpin(uint8_t dir_data, uint8_t step_data);
@@ -46,22 +46,21 @@
  *    18. void MeStepper::enableOutputs();
  */
 
+  enum Command {NoCommand,  Crash, Echo, SetPin=1, MoveTo, Move, Run, RunSpeed, SetMaxSpeed, SetAcceleration, SetSpeed, SetCurrentPosition, RunToPosition, RunSpeedToPosition, DisableOutputs, EnableOutputs, GetDistanceToGo, GetTargetPositon, GetCurrentPosition, } ;
+  enum DataType {IKM_MAKERBOTXY=5, MAKERBOT_ID=199};
 
 class xyRobot
 {    
   public:
-    enum Command {NoCommand, SetPin, MoveTo, Move, Run, RunSpeed, SetMaxSpeed, SetAcceleration, SetSpeed, SetCurrentPosition, RunToPosition, RunSpeedToPosition, DisableOutputs, EnableOutputs, GetDistanceToGo, GetTargetPositon, GetCurrentPosition, } ;
-    
-    xyRobot() {allocRobots();}
-
-    ~xyRobot() {end();}
+    ~xyRobot();
     
     void begin(int baud);
-    void end();
     
     int read();         // must be called regularly to clean out Serial buffer
     void run();      
-    void IDPacket();
+    void IDPacket(Command, uint8_t data1, uint8_t data2);
+    bool connection = false;
+    
   private:
 
   /* data - 1 or 2 steppers defined in the data
@@ -85,7 +84,7 @@ class xyRobot
     // internal variables used for reading messages
     const int packetsize = 7;
     uint8_t packet[7];  // temporary values, moved after we confirm checksum
-    int index;              // -1 = waiting for new packet
+    int index=-1;              // -1 = waiting for new packet
     int readpacket();
     MeStepper* steppers[2]; // enable reference by id
     void allocRobots();
@@ -93,37 +92,45 @@ class xyRobot
 
 xyRobot robot;
 
-void setup()
-{  
-  robot.begin(9600);
+void echo(uint8_t val){
+  Serial.write(val);
 }
 
-void loop()
-{
-  robot.read();
-  robot.run();
+void setup(){   
+  
+  robot.begin(19200);
+  
+}
+
+void loop(){
+
+  delay(50);
+  robot.IDPacket(NoCommand, MAKERBOT_ID, IKM_MAKERBOTXY);
+  Serial.println("bob");
+
+  //robot.read();
+
+  //robot.run();
 }
 
 // same data type as trossen for consistancy
 // key data is there are 5 bytes, the ARM ID is known, byte 4 is 0, chcksum is known
-void xyRobot::IDPacket()  {
-  Serial.write(0xFF);
-  Serial.write((uint8_t) 99);// ARM ID
-  Serial.write((uint8_t) 5); // mode
-  Serial.write((uint8_t) 0);
-  Serial.write((uint8_t)(255);
-  
+void xyRobot::IDPacket(Command cmd, uint8_t data1, uint8_t data2)  {
+  echo((uint8_t)0xee);
+  echo((uint8_t)data1);// ARM ID for example
+  echo((uint8_t)data2); 
+  echo((uint8_t)cmd); // cmd?
+  echo((uint8_t)MyIDis);
+  echo((unsigned char)(255 - (data1+data2+cmd+MyIDis)%256));  
 }
 
 MeStepper*  xyRobot::getStepper(StepperID id) {
-  if (id == IDstepper1){
-    return steppers[0];
-  }
   if (id == IDstepper2){
     return steppers[1];
   }
+  return steppers[0]; // always return something
 }
-void xyRobot::end(){
+xyRobot::~xyRobot(){
   if (steppers[0]){
     delete steppers[0];
     steppers[0] = nullptr;
@@ -137,32 +144,36 @@ void xyRobot::allocRobots(){
   steppers[0] = new MeStepper(PORT_1);
   steppers[1] = new MeStepper(PORT_2);
   if (steppers[0] == nullptr || steppers[1] == nullptr){
-   Serial.println("crash!");//bugbug go to json
+    IDPacket(Crash, 1, 0);
   }
-  memset(packet, 0, sizeof packet);
 }
 
 void xyRobot::run(){
-   if (getStepper(IDstepper1) == nullptr || getStepper(IDstepper2) == nullptr){
-   Serial.println("crash!");//bugbug go to json
+
+  if (getStepper(IDstepper1) == nullptr || getStepper(IDstepper2) == nullptr){
+   IDPacket(Crash, 2, 0);
    return;
   }
+  
   if (!getStepper(IDstepper1)->run()){
-    Serial.println("IDstepper1 bad!");
+   IDPacket(Crash, 3, 0);
   }
+  
   if (!getStepper(IDstepper2)->run()){
-    Serial.println("IDstepper2 bad!");
+   IDPacket(Crash, 4, 0);
   }
 }
  void xyRobot::begin(int baud){
+  
   Serial.begin(baud);
 
+  allocRobots();
+
   if (getStepper(IDstepper1) == nullptr && getStepper(IDstepper2) == nullptr){
-    Serial.println("not setup!"); //bugbug return json in all micro code
-    return;
+   IDPacket(Crash, 5, 0);
+   return;
   }
 
-  index = -1;
   // Change these to suit your stepper if you want, but set some reasonable defaults now
   if (getStepper(IDstepper1)){
     getStepper(IDstepper1)->setMaxSpeed(1000);
@@ -172,21 +183,22 @@ void xyRobot::run(){
     getStepper(IDstepper2)->setMaxSpeed(1000);
     getStepper(IDstepper2)->setAcceleration(20000);
   }
-  Serial.println("xy robot signed on");
-  Serial.println("my name is Lena");
+
+  index = -1;
 }
 
 void xyRobot::exec(StepperID id){
+   
+   IDPacket(Echo, id, getCommand(IDstepper1));
+   
   switch(getCommand(id)){
    case MoveTo:
-   Serial.print("move to ");
-   Serial.println(getLongData(id));
    //getStepper(id)->moveTo(getLongData(id));
-   break; 
+   break;
   }
-  IDPacket(); // always sent to be comptable with trossen
+ 
   //bugbug only send when data is validated if (!getStepper(id)->run()){
-    //Serial.println("bad!");
+    //IDPacket(Crash, 99, 0);
   //}
 }
 
@@ -203,31 +215,35 @@ void xyRobot::exec(StepperID id){
 int xyRobot::read(){
 
     if (readpacket()){
-        // packet complete, execute it
-        if (getCommand(IDstepper1) != NoCommand){
-          exec(IDstepper1);
-        }
-        if (getCommand(IDstepper2) != NoCommand){
-          exec(IDstepper2);
-        }
-        // reset data
-         memset(packet, 0, sizeof packet);
-        return 1;
+       if (getCommand(IDstepper1) == NoCommand){
+          connection = true;//bugbug clean up the sign on stuff
+          IDPacket(NoCommand, 0, 0);
+       }
+      // packet complete, execute it
+      if (getCommand(IDstepper1) != NoCommand){
+        exec(IDstepper1);
+      }
+      if (getCommand(IDstepper2) != NoCommand){
+        exec(IDstepper2);
+      }
+      // reset data
+       memset(packet, 0, sizeof packet);
+      return 1;
     }
     return 0;
 }
 
+// does not send serial data
 int xyRobot::readpacket(){
-  
+
    while(Serial.available() > 0){
 
         if(index == -1){         // looking for new packet
             if(Serial.read() == 0xee){
               // new packet found
               index = 0;
-            }
-            else {
-              Serial.println("unknown");
+              packet[index] = 0xee;
+              index++;
             }
         }
         else {
@@ -237,23 +253,12 @@ int xyRobot::readpacket(){
                 while(Serial.available()) {
                   Serial.read();
                 }
-                 Serial.print("packet read:");
-                 Serial.print(" cmd1:");
-                 Serial.print(getCommand(IDstepper1));
-                 Serial.print(" long data: ");
-                 Serial.print(getLongData(IDstepper1));
-                 Serial.print(" float data: ");
-                 Serial.print(getFloatData(IDstepper1));
-                 Serial.print(" cmd2:");
-                 Serial.print(getCommand(IDstepper2));
-                 Serial.print(" long data: ");
-                 Serial.print(getLongData(IDstepper2));
-                 Serial.print(" float data: ");
-                 Serial.println(getFloatData(IDstepper2));
                 return 1;
             }
-            packet[index] = (uint8_t) Serial.read();
-            index++;
+            else if (index < packetsize){
+              packet[index] = (uint8_t)Serial.read();
+              index++;
+            }
         }
     }
     return 0;
