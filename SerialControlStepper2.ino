@@ -59,7 +59,7 @@ class xyRobot
     int read();         // must be called regularly to clean out Serial buffer
     void run();      
     void IDPacket(Command, uint8_t data1, uint8_t data2);
-    bool connection = false;
+    bool connection;
     
   private:
 
@@ -99,16 +99,21 @@ void echo(uint8_t val){
 void setup(){   
   
   robot.begin(19200);
+  robot.connection = false;
   
 }
 
 void loop(){
 
-  delay(50);
-  robot.IDPacket(NoCommand, MAKERBOT_ID, IKM_MAKERBOTXY);
-  Serial.println("bob");
+  // sign on does not work in setup for some reason, spent 2 days on it.  time to move on
+   if (!robot.connection){
+    delay(50);
+    robot.IDPacket(NoCommand, MAKERBOT_ID, IKM_MAKERBOTXY);
+    Serial.println("Makeblock flatbed");
+    Serial.println("bob");
+   }
 
-  //robot.read();
+  robot.read();
 
   //robot.run();
 }
@@ -116,12 +121,11 @@ void loop(){
 // same data type as trossen for consistancy
 // key data is there are 5 bytes, the ARM ID is known, byte 4 is 0, chcksum is known
 void xyRobot::IDPacket(Command cmd, uint8_t data1, uint8_t data2)  {
-  echo((uint8_t)0xee);
-  echo((uint8_t)data1);// ARM ID for example
-  echo((uint8_t)data2); 
-  echo((uint8_t)cmd); // cmd?
-  echo((uint8_t)MyIDis);
-  echo((unsigned char)(255 - (data1+data2+cmd+MyIDis)%256));  
+  echo(0xee);
+  echo(data1);// ARM ID for example
+  echo(data2); 
+  echo(cmd); // cmd?
+  echo((255 - (data1+data2+cmd)%256));  
 }
 
 MeStepper*  xyRobot::getStepper(StepperID id) {
@@ -215,10 +219,7 @@ void xyRobot::exec(StepperID id){
 int xyRobot::read(){
 
     if (readpacket()){
-       if (getCommand(IDstepper1) == NoCommand){
-          connection = true;//bugbug clean up the sign on stuff
-          IDPacket(NoCommand, 0, 0);
-       }
+      connection = true;
       // packet complete, execute it
       if (getCommand(IDstepper1) != NoCommand){
         exec(IDstepper1);
