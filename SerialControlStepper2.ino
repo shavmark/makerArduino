@@ -193,8 +193,6 @@ void xyRobot::run(){
 
 void xyRobot::exec(StepperID id){
    
-   IDPacket(Echo, id, getCommand(IDstepper1));
-   
   switch(getCommand(id)){
    case MoveTo:
    //getStepper(id)->moveTo(getLongData(id));
@@ -220,6 +218,7 @@ int xyRobot::read(){
 
     if (readpacket()){
       connection = true;
+      IDPacket(Echo, getCommand(IDstepper1), getLongData(IDstepper1)); // give a reasonable ack
       // packet complete, execute it
       if (getCommand(IDstepper1) != NoCommand){
         exec(IDstepper1);
