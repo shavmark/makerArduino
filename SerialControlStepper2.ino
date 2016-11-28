@@ -47,7 +47,7 @@
  */
 
   enum Command {NoCommand,  SignOn, Crash, Echo, SetPin=1, MoveTo, Move, Run, RunSpeed, SetMaxSpeed, SetAcceleration, SetSpeed, SetCurrentPosition, RunToPosition, RunSpeedToPosition, DisableOutputs, EnableOutputs, GetDistanceToGo, GetTargetPositon, GetCurrentPosition, } ;
-  enum DataType {IKM_MAKERBOTXY=5, MAKERBOT_ID=199};
+  enum DataType {MAKERBOT_ID=4, IKM_MAKERBOTXY, };
 
 class xyRobot
 {    
@@ -98,25 +98,26 @@ void echo(uint8_t val){
 void buzz(int count){
   for (int i = 0; i < count; ++i){
     buzzerOn();
-    delay(i*100);
+    delay(i+1*1000);
     buzzerOff();
   }
 }
 
 void signon(){
   
-  for (int i = 0; i < 1000; ++i){
-    robot.IDPacket(SignOn, MAKERBOT_ID, IKM_MAKERBOTXY);
-    Serial.println("Makeblock flatbed");
-    Serial.println("bob");
- 
-  }
+  robot.IDPacket(SignOn, IKM_MAKERBOTXY, MAKERBOT_ID);
+  Serial.println("Makeblock flatbed");
+  Serial.println("bob");
 }
 void setup(){   
  
   robot.begin(19200);
   robot.connection = false;
-  
+  buzz(1);
+  //flush serial
+    while(Serial.available()) {
+      Serial.read();
+    }
 }
 
 void loop(){
@@ -129,10 +130,11 @@ void loop(){
 // same data type as trossen for consistancy
 // key data is there are 5 bytes, the ARM ID is known, byte 4 is 0, chcksum is known
 void xyRobot::IDPacket(Command cmd, uint8_t data1, uint8_t data2)  {
+  // data must be in this order to be compatable with data from other drivers, size too
   echo(0xee);
-  echo(cmd); // cmd?
   echo(data1);// ARM ID for example
   echo(data2); 
+  echo(cmd); // cmd?
   echo((255 - (data1+data2+cmd)%256));  
 }
 
@@ -253,16 +255,17 @@ int xyRobot::readpacket(){
         if(index == -1){         // looking for new packet
           
             if(Serial.read() == 0xee){
-               buzz(1);
+               
               // new packet found
               index = 0;
               packet[index] = 0xee;
               index++;
             }
         }
-        else {
+        else   if (index > 0){
+          
             if(index == packetsize-1){ // packet complete
-               buzz(5);
+                buzz(index);
                 index = -1;
                 //flush serial
                 while(Serial.available()) {
@@ -271,7 +274,6 @@ int xyRobot::readpacket(){
                 return 1;
             }
             else if (index < packetsize-1){
-              buzz(15);
               packet[index] = (uint8_t)Serial.read();
             }
             index++;
