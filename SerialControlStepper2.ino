@@ -46,7 +46,7 @@
  *    18. void MeStepper::enableOutputs();
  */
 
-  enum Command {NoCommand,  Crash, Echo, SetPin=1, MoveTo, Move, Run, RunSpeed, SetMaxSpeed, SetAcceleration, SetSpeed, SetCurrentPosition, RunToPosition, RunSpeedToPosition, DisableOutputs, EnableOutputs, GetDistanceToGo, GetTargetPositon, GetCurrentPosition, } ;
+  enum Command {NoCommand,  SignOn, Crash, Echo, SetPin=1, MoveTo, Move, Run, RunSpeed, SetMaxSpeed, SetAcceleration, SetSpeed, SetCurrentPosition, RunToPosition, RunSpeedToPosition, DisableOutputs, EnableOutputs, GetDistanceToGo, GetTargetPositon, GetCurrentPosition, } ;
   enum DataType {IKM_MAKERBOTXY=5, MAKERBOT_ID=199};
 
 class xyRobot
@@ -78,7 +78,6 @@ class xyRobot
     float getFloatData(StepperID id){return (float)((packet[id+1]<<8) + packet[id+2]);}
     Command getCommand(StepperID id) {return packet[id];}
     MeStepper*  getStepper(StepperID id);
-   
     void exec(StepperID id);
     
     // internal variables used for reading messages
@@ -96,22 +95,31 @@ void echo(uint8_t val){
   Serial.write(val);
 }
 
-void setup(){   
+void buzz(int count){
+  for (int i = 0; i < count; ++i){
+    buzzerOn();
+    delay(i*100);
+    buzzerOff();
+  }
+}
+
+void signon(){
   
+  for (int i = 0; i < 1000; ++i){
+    robot.IDPacket(SignOn, MAKERBOT_ID, IKM_MAKERBOTXY);
+    Serial.println("Makeblock flatbed");
+    Serial.println("bob");
+ 
+  }
+}
+void setup(){   
+ 
   robot.begin(19200);
   robot.connection = false;
   
 }
 
 void loop(){
-
-  // sign on does not work in setup for some reason, spent 2 days on it.  time to move on
-   if (!robot.connection){
-    delay(50);
-    robot.IDPacket(NoCommand, MAKERBOT_ID, IKM_MAKERBOTXY);
-    Serial.println("Makeblock flatbed");
-    Serial.println("bob");
-   }
 
   robot.read();
 
@@ -122,9 +130,9 @@ void loop(){
 // key data is there are 5 bytes, the ARM ID is known, byte 4 is 0, chcksum is known
 void xyRobot::IDPacket(Command cmd, uint8_t data1, uint8_t data2)  {
   echo(0xee);
+  echo(cmd); // cmd?
   echo(data1);// ARM ID for example
   echo(data2); 
-  echo(cmd); // cmd?
   echo((255 - (data1+data2+cmd)%256));  
 }
 
@@ -170,6 +178,7 @@ void xyRobot::run(){
  void xyRobot::begin(int baud){
   
   Serial.begin(baud);
+
 
   allocRobots();
 
@@ -218,7 +227,10 @@ int xyRobot::read(){
 
     if (readpacket()){
       connection = true;
-      IDPacket(Echo, getCommand(IDstepper1), getLongData(IDstepper1)); // give a reasonable ack
+
+      if (getCommand(IDstepper1) == SignOn){
+        signon();
+      }
       // packet complete, execute it
       if (getCommand(IDstepper1) != NoCommand){
         exec(IDstepper1);
@@ -239,7 +251,9 @@ int xyRobot::readpacket(){
    while(Serial.available() > 0){
 
         if(index == -1){         // looking for new packet
+          
             if(Serial.read() == 0xee){
+               buzz(1);
               // new packet found
               index = 0;
               packet[index] = 0xee;
@@ -247,7 +261,8 @@ int xyRobot::readpacket(){
             }
         }
         else {
-            if(index == packetsize){ // packet complete
+            if(index == packetsize-1){ // packet complete
+               buzz(5);
                 index = -1;
                 //flush serial
                 while(Serial.available()) {
@@ -255,10 +270,11 @@ int xyRobot::readpacket(){
                 }
                 return 1;
             }
-            else if (index < packetsize){
+            else if (index < packetsize-1){
+              buzz(15);
               packet[index] = (uint8_t)Serial.read();
-              index++;
             }
+            index++;
         }
     }
     return 0;
